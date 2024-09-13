@@ -1,3 +1,5 @@
+STM32F103C8 - Bluepill
+
 Uni-polar Sine-wave Inverter
 
 PWM HA 		     -> GPIO PIN 8, PWM LA 		     -> GPIO PIN 7
