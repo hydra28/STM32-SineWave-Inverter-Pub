@@ -1,4 +1,5 @@
 Uni-polar Sine-wave Inverter
+
 PWM HA 		     -> GPIO PIN 8, PWM LA 		     -> GPIO PIN 7
 Fundamental HB -> GPIO PIN 9, Fundamental LB -> GPIO PIN 10
 
