@@ -27,7 +27,7 @@
  */
 
 /* For output Low Pass Filter, find cut-off resonance frequency -> f_cut = 1/(2*pi*(LC)^-1)
- * i use L = 0.1 H with C = 47/2 uF to get ~ 100 Hz Cut-off frequency.*/
+ * i use L = 660 uH with C = 47/2 uF to get ~ 600 Hz Cut-off frequency.*/
 
 
 #include "main.h"
