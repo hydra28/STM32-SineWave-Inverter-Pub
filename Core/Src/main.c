@@ -61,7 +61,7 @@ void ISR_SINE(void);
 int main(void)
 {
 
-  sampleNum = (int)(f_carrier/f_fundamental);
+  sampleNum = (int)(f_carrier/f_fundamental_1);
 
   radVal = 2 * PI / sampleNum;
 
