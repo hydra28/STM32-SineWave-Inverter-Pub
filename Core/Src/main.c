@@ -50,7 +50,7 @@ int f_fundamental;
 int sampleNum;
 float radVal;
 float sineValue[1000];
-float duty_coeff;
+float duty_coeff = duty_coeff_2;
 
 
 void SystemClock_Config(void);
