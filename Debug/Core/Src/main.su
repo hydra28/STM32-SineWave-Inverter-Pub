@@ -1,4 +1,7 @@
-../Core/Src/main.c:61:5:main	24	static
-../Core/Src/main.c:92:6:ISR_SINE	8	static
-../Core/Src/main.c:124:6:SystemClock_Config	72	static
-../Core/Src/main.c:167:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:62:5:main	24	static
+../Core/Src/main.c:100:6:PWM_STOP	8	static
+../Core/Src/main.c:109:6:PWM_START	8	static
+../Core/Src/main.c:114:6:HAL_GPIO_EXTI_Callback	16	static
+../Core/Src/main.c:149:6:ISR_SINE	8	static
+../Core/Src/main.c:210:6:SystemClock_Config	72	static
+../Core/Src/main.c:253:6:Error_Handler	4	static,ignoring_inline_asm
