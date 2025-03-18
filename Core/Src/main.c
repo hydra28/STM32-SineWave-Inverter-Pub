@@ -34,7 +34,6 @@
 #include "tim.h"
 #include "gpio.h"
 #include "math.h"
-#include "string.h"
 
 #define f_carrier 25000
 #define f_fundamental_1 50
@@ -44,51 +43,42 @@
 const float PI = M_PI;
 const float duty_coeff_1 = 0.741;
 const float duty_coeff_2 = 1.0;
-int Duty, speed = 1, status, f_fundamental, sampleNum, sampleNum_1, sampleNum_2;
-int k = 0, b = 0, runflag = 0;
+int Duty;
+int k = 0;
+int b = 0;
+int f_fundamental;
+int sampleNum;
 float radVal;
-float sineValue_1[1000];
-float sineValue_2[1000];
-int duty_coeff = 1;
+float sineValue[1000];
+float duty_coeff = duty_coeff_2;
 
 
 void SystemClock_Config(void);
+
 void ISR_SINE(void);
-void PWM_START(void);
-void PWM_STOP(void);
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 
 
 int main(void)
 {
 
-  sampleNum_1 = (int)(f_carrier/f_fundamental_1);
+  sampleNum = (int)(f_carrier/f_fundamental_1);
 
-  radVal = 2 * PI / sampleNum_1;
+  radVal = 2 * PI / sampleNum;
 
-  for(int i=1;i<sampleNum_1+1;i++){
-	      sineValue_1[i] = sin(radVal*(i));
-  }
-
-  sampleNum_2 = (int)(f_carrier/f_fundamental_2);
-
-  radVal = 2 * PI / sampleNum_2;
-
-  for(int i=1;i<sampleNum_2+1;i++){
-	      sineValue_2[i] = sin(radVal*(i));
+  for(int i=1;i<sampleNum+1;i++){
+	      sineValue[i] = sin(radVal*(i));
   }
 
   HAL_Init();
+
   SystemClock_Config();
+
   MX_GPIO_Init();
+
   MX_TIM1_Init();
   HAL_TIM_Base_Start_IT(&htim1);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-//  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-//  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
   while (1)
   {
@@ -97,106 +87,30 @@ int main(void)
 
 }
 
-void PWM_STOP(void){
-	HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
-	HAL_TIMEx_PWMN_Stop(&htim1, TIM_CHANNEL_1);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-}
-
-void PWM_START(void){
-	 HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-	 HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-}
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	if (GPIO_Pin == GPIO_PIN_0) // 33 RPM
-	{
-		speed = 0;
-	}
-
-	if (GPIO_Pin == GPIO_PIN_1) // 45 RPM
-	{
-		speed = 1;
-	}
-
-	if (GPIO_Pin == GPIO_PIN_2)
-	{
-//		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-		if(runflag == 0){
-			runflag = 1;
-//			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET);
-			duty_coeff = 1;
-			PWM_START();
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-		}
-		else{
-			runflag = 0;
-			duty_coeff = 0;
-//			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
-			PWM_STOP();
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-
-		}
-	}
-}
-
 
 /*Function for The Interrupt*/
 void ISR_SINE(void) {
-	if(b>1 && runflag == 1){
-
-	  //===================================================//
-	  if(speed == 0){
-		  sampleNum = sampleNum_1;
-		  Duty = (int)(duty_coeff*TIMER_PERIOD*sineValue_1[k]);
-		  if (k==0) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-			TIM1->CCR1= 0;
-		  }
-		  if (k==(int)(sampleNum/2)) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-			TIM1->CCR1 = TIMER_PERIOD;
-		  }
-		  if (k>0 && k<(int)(sampleNum/2))  {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
-			TIM1->CCR1 = Duty;
-		  }
-		  if (k>0 && k>(int)(sampleNum/2) ) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-			TIM1->CCR1 = TIMER_PERIOD + Duty;
-		  }
-		  k++;
-		  if (k > sampleNum ) k=0;
+	if(b>1){
+	  Duty = (int)(duty_coeff*TIMER_PERIOD*sineValue[k]);
+	  if (k==0) {
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
+		TIM1->CCR1= 0;
 	  }
-
-	  if(speed == 1){
-		  sampleNum = sampleNum_2;
-		  Duty = (int)(duty_coeff*TIMER_PERIOD*sineValue_2[k]);
-		  if (k==0) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_RESET);
-			TIM1->CCR1= 0;
-		  }
-		  if (k==(int)(sampleNum/2)) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
-			TIM1->CCR1 = TIMER_PERIOD;
-		  }
-		  if (k>0 && k<(int)(sampleNum/2))  {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
-			TIM1->CCR1 = Duty;
-		  }
-		  if (k>0 && k>(int)(sampleNum/2) ) {
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-			TIM1->CCR1 = TIMER_PERIOD + Duty;
-		  }
-		  k++;
-		  if (k > sampleNum ) k=0;
+	  if (k==(sampleNum/2)) {
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_RESET);
+		TIM1->CCR1 = TIMER_PERIOD;
 	  }
-	  //===================================================//
-
+	  if (k>0 && k<(sampleNum/2))  {
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_10, GPIO_PIN_SET);
+		TIM1->CCR1 = Duty;
+	  }
+	  if (k>0 && k>(sampleNum/2) ) {
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+		TIM1->CCR1 = TIMER_PERIOD + Duty;
+	  }
+	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+	  k++;
+	  if (k > sampleNum ) k=0;
 	  b=0;
 	}
 	b++;
