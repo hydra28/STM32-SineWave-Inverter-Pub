@@ -1,6 +1,6 @@
 ################################################################################
 # Automatically-generated file. Do not edit!
-# Toolchain: GNU Tools for STM32 (12.3.rel1)
+# Toolchain: GNU Tools for STM32 (13.3.rel1)
 ################################################################################
 
 -include ../makefile.init
@@ -60,8 +60,8 @@ all: main-build
 main-build: SineWave\ Inverter.elf secondary-outputs
 
 # Tool invocations
-SineWave\ Inverter.elf SineWave\ Inverter.map: $(OBJS) $(USER_OBJS) C:\Users\hideo\Documents\GitHub\STM32-SineWave-Inverter\STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "SineWave Inverter.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\hideo\Documents\GitHub\STM32-SineWave-Inverter\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SineWave Inverter.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+SineWave\ Inverter.elf SineWave\ Inverter.map: $(OBJS) $(USER_OBJS) C:\Users\hideo\Documents\GitHub\STM32-SineWave-Inverter-Pub\STM32F103C8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "SineWave Inverter.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m3 -T"C:\Users\hideo\Documents\GitHub\STM32-SineWave-Inverter-Pub\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SineWave Inverter.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
