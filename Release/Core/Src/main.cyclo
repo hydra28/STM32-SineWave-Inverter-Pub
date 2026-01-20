@@ -1,4 +1,4 @@
-../Core/Src/main.c:91:6:ISR_SINE	10
-../Core/Src/main.c:141:6:SystemClock_Config	3
+../Core/Src/main.c:94:6:ISR_SINE	9
+../Core/Src/main.c:153:6:SystemClock_Config	3
 ../Core/Src/main.c:59:5:main	2
-../Core/Src/main.c:184:6:Error_Handler	1
+../Core/Src/main.c:196:6:Error_Handler	1

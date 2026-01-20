@@ -35,9 +35,9 @@
 #include "gpio.h"
 #include "math.h"
 
-#define f_carrier 60000
+#define f_carrier 30000
 #define f_fundamental 60 // 60 Hz
-#define TIMER_PERIOD 1199
+#define TIMER_PERIOD 2399
 
 const float PI = M_PI;
 
@@ -49,7 +49,7 @@ float radVal;
 float sineValue[1000];
 float duty_coeff = 0.9f;
 float soft_start_mult = 0.0f;
-const float soft_start_step = 0.00002f; // 1.0s / 50000 Hz
+const float soft_start_step = 0.00002f;
 
 
 void SystemClock_Config(void);
@@ -61,7 +61,7 @@ int main(void)
 
   sampleNum = (int)(f_carrier/f_fundamental)/2; // Divided by 2 because only using half cycle
 
-  radVal = 1.0f * PI / sampleNum; // half cycle
+  radVal = 1.0f * PI / (float)sampleNum; // half cycle
 
   for(int i=1;i<=sampleNum;i++){
 	      sineValue[i] = sin(radVal*(i));
@@ -79,6 +79,9 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
+//  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+//  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+
   while(1)
   {
 	  /* Infinite Loop */
@@ -91,7 +94,7 @@ int main(void)
 void ISR_SINE(void) {
 	k++;
 
-	// Soft start for 1 second
+	// Soft start
 	if (soft_start_mult < 1.0f) {
 		soft_start_mult += soft_start_step;
 	}
@@ -102,36 +105,45 @@ void ISR_SINE(void) {
 	Duty = (int)(duty_coeff * TIMER_PERIOD * sineValue[k] * soft_start_mult); // Calculate duty cycle
 
 	// Beginning of Half Cycle
-	if(k==1) {
+	if(k == 1) {
 		// phase = 0 for Positive Half Cycle & phase = 1 for Negative Half Cycle
-		if(phase==0) {
-			GPIOA->BRR = GPIO_PIN_9; // Turn OFF pin HB
-			GPIOB->BSRR = GPIO_PIN_0; // Turn ON pin LB
-			TIM1->CCR1= Duty;
+		if(phase == 0) {
+			GPIOA->BRR = GPIO_PIN_9;  // HB OFF
+			GPIOB->BSRR = GPIO_PIN_0; // LB ON
+			TIM1->CCR1 = Duty;
+		} else {
+			GPIOB->BRR = GPIO_PIN_0;  // LB OFF
+			GPIOA->BSRR = GPIO_PIN_9; // HB ON
+			TIM1->CCR1 = TIMER_PERIOD - Duty;
 		}
-
-		if(phase==1) {
-			GPIOB->BRR = GPIO_PIN_0; // Turn OFF pin LB
-			GPIOA->BSRR = GPIO_PIN_9; // Turn ON pin HB
-			TIM1->CCR1= TIMER_PERIOD - Duty;
-		}
-		TIM1->BDTR |= TIM_BDTR_MOE; // Enable  master output to restart PWM
+		TIM1->BDTR |= TIM_BDTR_MOE; // Enable outputs now
 	}
 
+
 	// Half Cycle
-	if(k>1 && k<sampleNum) {
-		if(phase==0) TIM1->CCR1= Duty; // Set PWM Duty (HA > LA for Positive Half Cycle)
-		if(phase==1) TIM1->CCR1= TIMER_PERIOD - Duty; // Set PWM Duty (LA > HA for Negative Half Cycle)
+	if(k > 1 && k < sampleNum) {
+		if(phase == 0) TIM1->CCR1 = Duty;
+		else           TIM1->CCR1 = TIMER_PERIOD - Duty;
 	}
 
 	// Zero Crossing
-	if(k==sampleNum) {
-		k = 0;
-		TIM1->BDTR &= ~(TIM_BDTR_MOE); // Disable master output to stop PWM when zero crossing
-		GPIOA->BRR = GPIO_PIN_9; // Turn OFF pin HB
-		GPIOB->BRR = GPIO_PIN_0; // Turn OFF pin LB
-		phase = !phase;
+	if(k >= sampleNum) {
+		// Pre-calculate the first Duty of the NEXT phase (k=1 of next phase)
+		int nextDuty = (int)(duty_coeff * TIMER_PERIOD * sineValue[1] * soft_start_mult);
+
+		// Prepare CCR1 for the first cycle of the next phase
+		if(!phase == 0) TIM1->CCR1 = nextDuty;
+		else            TIM1->CCR1 = TIMER_PERIOD - nextDuty;
+
+		k = 0; // Reset counter
+
+		// INSTANTLY stop outputs to prevent the "shadow" glitch
+		TIM1->BDTR &= ~(TIM_BDTR_MOE);
+		GPIOA->BRR = GPIO_PIN_9; // HB OFF
+		GPIOB->BRR = GPIO_PIN_0; // LB OFF
+		phase = !phase; // Flip phase for the next interrupt
 	}
+
 }
 
 /**
