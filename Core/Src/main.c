@@ -27,30 +27,50 @@
  */
 
 /* For output Low Pass Filter, find cut-off resonance frequency -> f_cut = 1/(2*pi*(LC)^-1)
- * i use L = 3.8 mH with C = 3.3 uF to get ~ 1.5 kHz Cut-off frequency.*/
+ * i use L = 400 uH with C = 3.3 uF to get ~ 4 kHz Cut-off frequency.*/
 
 
 #include "main.h"
+#include "adc.h"
+#include "dma.h"
 #include "tim.h"
 #include "gpio.h"
 #include "math.h"
 
-#define f_carrier 30000
-#define f_fundamental 60 // 60 Hz
-#define TIMER_PERIOD 2399
+#define f_carrier 25000
+#define f_fundamental 50 // 50 Hz
+#define TIMER_PERIOD 2880
+#define ADC_BUF_LEN 3
+#define TRIP_LIMIT_PEAK 6 // In Amps
+#define TRIP_LIMIT_RMS 6 // In Amps
 
 const float PI = M_PI;
+
+uint16_t adc_buffer[ADC_BUF_LEN];
+volatile uint8_t cycle_complete = 0;
 
 int Duty;
 int k = 0;
 int phase = 0;
 int sampleNum;
+int TRIP_LIMIT_PEAK_PA0 = (int)(((TRIP_LIMIT_PEAK*0.625/6)+2.52)/3.3f*4095.0f);
+int TRIP_LIMIT_RMS_PA0 = (int)(((TRIP_LIMIT_RMS*0.625/6)+2.52)/3.3f*4095.0f);
+
 float radVal;
 float sineValue[1000];
 float duty_coeff = 0.9f;
+float target_peak = 1400.0f; // Target ADC value for PA1
+float squared_sum = 0;
+float current_rms = 0;
 float soft_start_mult = 0.0f;
 const float soft_start_step = 0.00002f;
+float final_squared_sum = 0;
 
+/* PI Controller Variables */
+float Kp = 0.00002f;           // Proportional Gain
+float Ki = 0.000001f;           // Integral Gain
+float integral_error = 0.0f;   // Accumulated error
+float max_integral = 0.2f;     // Anti-windup clamp
 
 void SystemClock_Config(void);
 
@@ -70,21 +90,32 @@ int main(void)
 
   HAL_Init();
   SystemClock_Config();
+
   MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_ADC1_Init();
+
+  HAL_ADCEx_Calibration_Start(&hadc1);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, ADC_BUF_LEN);
+
   HAL_Delay(1000);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET); // IN-RUSH CURRENT RELAY
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET); // LED FAULT STATUS
   HAL_Delay(2000);
+
+
   MX_TIM1_Init();
   HAL_TIM_Base_Start_IT(&htim1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 
-//  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-//  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
 
   while(1)
   {
-	  /* Infinite Loop */
+	  if(cycle_complete) {
+		  current_rms = sqrtf(final_squared_sum / (float)sampleNum);
+		  cycle_complete = 0;
+	  }
   }
 
 }
@@ -94,13 +125,39 @@ int main(void)
 void ISR_SINE(void) {
 	k++;
 
+	// Accumulate squares for RMS
+	float current_reading = (float)adc_buffer[0];
+	squared_sum += (current_reading * current_reading);
+
 	// Soft start
 	if (soft_start_mult < 1.0f) {
 		soft_start_mult += soft_start_step;
-	}
-	else {
+	} else {
 		soft_start_mult = 1.0f;
+
+		// 3. PI CONTROLLER (Only runs after soft start finishes)
+		// We update once per full cycle at the peak of the negative half-cycle
+//		if (k == (sampleNum / 2) && phase == 1) {
+//			float actual_peak = (float)adc_buffer[1];
+//			float error = target_peak - actual_peak;
+//
+//			// Update Integral Term
+//			integral_error += (error * Ki);
+//
+//			// Anti-Windup Clamping
+//			if (integral_error > max_integral)  integral_error = max_integral;
+//			if (integral_error < -max_integral) integral_error = -max_integral;
+//
+//			// PI Formula: Base Duty (0.8) + Proportional + Integral
+//			// Increased Kp/Ki slightly for visible reaction
+//			duty_coeff = 0.30f + (error * Kp) + integral_error;
+//
+//			// Safety Clamps
+//			if (duty_coeff > 0.98f) duty_coeff = 0.98f;
+//			if (duty_coeff < 0.10f) duty_coeff = 0.10f;
+//		}
 	}
+
 
 	Duty = (int)(duty_coeff * TIMER_PERIOD * sineValue[k] * soft_start_mult); // Calculate duty cycle
 
@@ -119,15 +176,14 @@ void ISR_SINE(void) {
 		TIM1->BDTR |= TIM_BDTR_MOE; // Enable outputs now
 	}
 
-
 	// Half Cycle
-	if(k > 1 && k < sampleNum) {
+	if(k > 1 && k <= sampleNum) {
 		if(phase == 0) TIM1->CCR1 = Duty;
 		else           TIM1->CCR1 = TIMER_PERIOD - Duty;
 	}
 
 	// Zero Crossing
-	if(k >= sampleNum) {
+	if(k > sampleNum) {
 		// Pre-calculate the first Duty of the NEXT phase (k=1 of next phase)
 		int nextDuty = (int)(duty_coeff * TIMER_PERIOD * sineValue[1] * soft_start_mult);
 
@@ -142,7 +198,46 @@ void ISR_SINE(void) {
 		GPIOA->BRR = GPIO_PIN_9; // HB OFF
 		GPIOB->BRR = GPIO_PIN_0; // LB OFF
 		phase = !phase; // Flip phase for the next interrupt
+
+		// Calculate RMS Current
+		final_squared_sum = squared_sum;
+		cycle_complete = 1;
+
+		// Reset Sum
+		squared_sum = 0;
+
+		// TRIP RMS Current
+//		if (current_rms > TRIP_LIMIT_RMS_PA0) {
+//				// INSTANTLY disable PWM outputs
+//				TIM1->BDTR &= ~(TIM_BDTR_MOE);
+//
+//				// Force all pins LOW to protect MOSFETs
+//				GPIOA->BRR = (GPIO_PIN_8 | GPIO_PIN_7 | GPIO_PIN_9);
+//				GPIOB->BRR = (GPIO_PIN_0);
+//
+//				// LED Indicator
+//				GPIOC->BRR = (GPIO_PIN_13);
+//
+//				Error_Handler();
+//				return;
+//			}
 	}
+
+	// TRIP PEAK Current
+//	if (adc_buffer[0] > TRIP_LIMIT_PEAK_PA0) {
+//		// INSTANTLY disable PWM outputs
+//		TIM1->BDTR &= ~(TIM_BDTR_MOE);
+//
+//		// Force all pins LOW to protect MOSFETs
+//		GPIOA->BRR = (GPIO_PIN_8 | GPIO_PIN_7 | GPIO_PIN_9);
+//		GPIOB->BRR = (GPIO_PIN_0);
+//
+//		// LED Indicator
+//		GPIOC->BRR = (GPIO_PIN_13);
+//
+//		Error_Handler();
+//		return;
+//	}
 
 }
 
